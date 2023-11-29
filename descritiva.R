@@ -12,6 +12,10 @@ df <- PNADcIBGE::read_pnadc(microdata = "PNADC_032023.txt",
                             input_txt = "input_PNADC_trimestral.txt") %>% 
   pnadc_design()
 
+municipios <- readxl::read_excel("municipios.xls", skip = 4) %>% 
+  select(UF, nome = Nome_UF) %>% 
+  distinct()
+
 #Quais ocupações mais empregam----
 ocupacoes_emprego <- df %>% 
   srvyr::as_survey(strata = stype) %>% 
@@ -33,14 +37,17 @@ ocupacoes_emprego <- df %>%
   group_by(UF, grupo) %>% 
   summarize(n = sum(n))
 
-ocupacoes_emprego.tabela <- setores_emprego %>%
+ocupacoes_emprego.tabela <- ocupacoes_emprego %>%
   group_by(UF) %>% 
   summarize(sum_n = sum(n)) %>% 
-  right_join(setores_emprego) %>% 
+  right_join(ocupacoes_emprego) %>% 
   group_by(UF, grupo) %>% 
   summarize(sum_n = mean(sum_n),
             n = sum(n)) %>% 
-  mutate(prop = n/sum_n)
+  mutate(prop = n/sum_n) %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome)
+
 
 ocupacoes_emprego.tabela %>% 
   pivot_wider(id_cols = UF, names_from = grupo, values_from = prop) %>% 
@@ -62,10 +69,10 @@ setor_emprego <- df %>%
                            V4013 > 58000 & V4013 < 82009 ~ "Informação, comunicação e atividades financeiras, imobiliárias, profissionais e administrativas ",
                            V4013 > 84011 & V4013 < 88000 ~ "Administração pública, defesa e seguridade social, educação, saúde humana e serviços sociais",
                            V4013 == 97000 ~ "Serviços domésticos",
-                           (V4013 > 90000 & 96090 < 03002) | V4013 == 99000 ~ "Outros serviços ",
-                           TRUE ~ "number")) %>% 
+                           (V4013 > 90000 & V4013 < 96090) | V4013 == 99000 ~ "Outros serviços")) %>% 
   group_by(UF, grupo) %>% 
-  summarize(n = sum(n))
+  summarize(n = sum(n)) %>% 
+  drop_na()
 
 setor_emprego.tabela <- setor_emprego %>%
   group_by(UF) %>% 
@@ -74,7 +81,9 @@ setor_emprego.tabela <- setor_emprego %>%
   group_by(UF, grupo) %>% 
   summarize(sum_n = mean(sum_n),
             n = sum(n)) %>% 
-  mutate(prop = n/sum_n)
+  mutate(prop = n/sum_n)  %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome) 
 
 setor_emprego.tabela %>% 
   pivot_wider(id_cols = UF, names_from = grupo, values_from = prop) %>% 
