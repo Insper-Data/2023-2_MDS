@@ -7,6 +7,7 @@ library(geobr)
 library(stringi)
 library(openxlsx)
 
+
 df <- PNADcIBGE::get_pnadc(2022, topic = 4, labels = TRUE, design = TRUE)
 
 #PNAD CONTINUA
@@ -51,6 +52,52 @@ inclusao_digital %>%
   select(-UF, UF = nome) %>% 
   openxlsx::write.xlsx("tabelas/inclusao_digital.xlsx")
 
+
+# Uso de plataformas gigitais ----
+
+uso.uf <- uso_digital %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(n_total = sum(n))
+
+inclusao_digital %>% 
+  left_join(pessoas.uf) %>% 
+  ungroup() %>% 
+  mutate(prop = n / n_total,
+         across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), ~ ifelse(. == 1, prop, 0))) %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), sum)) %>% 
+  pivot_wider(id_cols = UF, names_from = VI5002A, values_from = c(S01022, S01024A, S01025, S01029, S01028, S01030A1)) %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome) %>% 
+  openxlsx::write.xlsx("tabelas/inclusao_digital.xlsx")
+
+
+# Motivos para não ter internet ----
+freq_internet <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::group_by(UF, VI5002A, S07001A) %>% 
+  srvyr::survey_tally() %>% 
+  drop_na() %>% 
+  filter(VI5002A != 9) %>% 
+  select(-n_se) %>% 
+  mutate(VI5002A = ifelse(VI5002A == 1, "recebe", "nao_recebe") )
+
+freq_n_total <- freq_internet %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(n_total = sum(n))
+  
+
+freq_internet %>% 
+  left_join(freq_n_total) %>% 
+  ungroup() %>% 
+  mutate(prop = n / n_total,
+         across(c(S07001A), ~ ifelse(. == 1, prop, 0))) %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(across(c(S07001A), sum)) %>% 
+  pivot_wider(id_cols = UF, names_from = VI5002A, values_from = c(S07001A)) %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome) %>% 
+  openxlsx::write.xlsx("tabelas/freq_net.xlsx")
 
 #Quais ocupações mais empregam----
 ocupacoes_emprego <- df %>% 
@@ -124,6 +171,9 @@ setor_emprego.tabela <- setor_emprego %>%
 setor_emprego.tabela %>% 
   pivot_wider(id_cols = UF, names_from = grupo, values_from = prop) %>% 
   openxlsx::write.xlsx("tabelas/setor_emprego.xlsx")
+
+
+
 
 #Por onde pessoas n?o ocupadas buscam emprego, separado BF ----
 busca_emprego <- df %>% 
