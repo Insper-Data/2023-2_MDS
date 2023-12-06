@@ -8,13 +8,49 @@ library(stringi)
 library(openxlsx)
 
 df <- PNADcIBGE::get_pnadc(2022, topic = 4, labels = TRUE, design = TRUE)
-df <- PNADcIBGE::read_pnadc(microdata = "PNADC_032023.txt", 
-                            input_txt = "input_PNADC_trimestral.txt") %>% 
+
+#PNAD CONTINUA
+df <- PNADcIBGE::read_pnadc(microdata = "dados_pnad/PNADC_032023.txt", 
+                            input_txt = "dados_pnad/input_PNADC_trimestral.txt") %>% 
+  pnadc_design()
+
+#PNAD ANUAL TRIMESTRE 4
+df <- PNADcIBGE::read_pnadc(microdata = "dados_pnad/PNADC_2022_trimestre4.txt", 
+                            input_txt = "dados_pnad/input_PNADC_trimestre4.txt") %>% 
   pnadc_design()
 
 municipios <- readxl::read_excel("municipios.xls", skip = 4) %>% 
   select(UF, nome = Nome_UF) %>% 
   distinct()
+
+#Inclusão Digital ----
+inclusao_digital <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::group_by(UF, VI5002A, S01022, S01024A, S01025, S01029, S01028, S01030A1) %>% 
+  srvyr::survey_tally() %>% 
+  select(-n_se) %>% 
+  filter(VI5002A != 9) %>% 
+  mutate(VI5002A = ifelse(VI5002A == 1, "recebe", "nao_recebe"),
+         S01025 = ifelse(S01025 == 4, 2, 1),
+         S01030A1 = ifelse(S01030A1 == 3, NA, S01030A1)) %>% 
+  drop_na()
+
+pessoas.uf <- inclusao_digital %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(n_total = sum(n))
+
+inclusao_digital %>% 
+  left_join(pessoas.uf) %>% 
+  ungroup() %>% 
+  mutate(prop = n / n_total,
+         across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), ~ ifelse(. == 1, prop, 0))) %>% 
+  group_by(UF, VI5002A) %>% 
+  summarize(across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), sum)) %>% 
+  pivot_wider(id_cols = UF, names_from = VI5002A, values_from = c(S01022, S01024A, S01025, S01029, S01028, S01030A1)) %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome) %>% 
+  openxlsx::write.xlsx("tabelas/inclusao_digital.xlsx")
+
 
 #Quais ocupações mais empregam----
 ocupacoes_emprego <- df %>% 
