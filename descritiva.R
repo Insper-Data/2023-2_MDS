@@ -8,7 +8,7 @@ library(stringi)
 library(openxlsx)
 
 
-df <- PNADcIBGE::get_pnadc(2022, topic = 4, labels = TRUE, design = TRUE)
+df <- PNADcIBGE::get_pnadc(2022, topic = 4, labels = FALSE, design = TRUE)
 
 #PNAD CONTINUA
 df <- PNADcIBGE::read_pnadc(microdata = "dados_pnad/PNADC_032023.txt", 
@@ -24,53 +24,21 @@ municipios <- readxl::read_excel("municipios.xls", skip = 4) %>%
   select(UF, nome = Nome_UF) %>% 
   distinct()
 
-#Inclusão Digital ----
+#Inclusão Digital BRASIL----
 inclusao_digital <- df %>% 
   srvyr::as_survey(strata = stype) %>% 
-  srvyr::group_by(UF, VI5002A, S01022, S01024A, S01025, S01029, S01028, S01030A1) %>% 
+  srvyr::group_by(VI5002A, across(c(starts_with("S07002"), starts_with("S07004"), starts_with("S07004A"), S07006, S07007))) %>% 
   srvyr::survey_tally() %>% 
-  select(-n_se) %>% 
-  filter(VI5002A != 9) %>% 
-  mutate(VI5002A = ifelse(VI5002A == 1, "recebe", "nao_recebe"),
-         S01025 = ifelse(S01025 == 4, 2, 1),
-         S01030A1 = ifelse(S01030A1 == 3, NA, S01030A1)) %>% 
-  drop_na()
-
-pessoas.uf <- inclusao_digital %>% 
-  group_by(UF, VI5002A) %>% 
-  summarize(n_total = sum(n))
+  select(-n_se)
 
 inclusao_digital %>% 
-  left_join(pessoas.uf) %>% 
-  ungroup() %>% 
-  mutate(prop = n / n_total,
-         across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), ~ ifelse(. == 1, prop, 0))) %>% 
-  group_by(UF, VI5002A) %>% 
-  summarize(across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), sum)) %>% 
-  pivot_wider(id_cols = UF, names_from = VI5002A, values_from = c(S01022, S01024A, S01025, S01029, S01028, S01030A1)) %>% 
-  left_join(municipios) %>% 
-  select(-UF, UF = nome) %>% 
-  openxlsx::write.xlsx("tabelas/inclusao_digital.xlsx")
-
-
-# Uso de plataformas gigitais ----
-
-uso.uf <- uso_digital %>% 
-  group_by(UF, VI5002A) %>% 
-  summarize(n_total = sum(n))
-
-inclusao_digital %>% 
-  left_join(pessoas.uf) %>% 
-  ungroup() %>% 
-  mutate(prop = n / n_total,
-         across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), ~ ifelse(. == 1, prop, 0))) %>% 
-  group_by(UF, VI5002A) %>% 
-  summarize(across(c(S01022, S01024A, S01025, S01029, S01028, S01030A1), sum)) %>% 
-  pivot_wider(id_cols = UF, names_from = VI5002A, values_from = c(S01022, S01024A, S01025, S01029, S01028, S01030A1)) %>% 
-  left_join(municipios) %>% 
-  select(-UF, UF = nome) %>% 
-  openxlsx::write.xlsx("tabelas/inclusao_digital.xlsx")
-
+  pivot_longer(!c(n, VI5002A)) %>% 
+  drop_na() %>% 
+  mutate(sim = ifelse(value == 1, n, 0)) %>% 
+  group_by(VI5002A, name) %>% 
+  summarize(prop = sum(sim)/sum(n)) %>% 
+  pivot_wider(id_cols = VI5002A, names_from = name, values_from = prop) %>% 
+  openxlsx::write.xlsx("tabelas/inclusao_digital_BF.xlsx")
 
 # Motivos para não ter internet ----
 freq_internet <- df %>% 
@@ -86,7 +54,6 @@ freq_n_total <- freq_internet %>%
   group_by(UF, VI5002A) %>% 
   summarize(n_total = sum(n))
   
-
 freq_internet %>% 
   left_join(freq_n_total) %>% 
   ungroup() %>% 
