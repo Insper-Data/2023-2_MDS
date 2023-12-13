@@ -27,18 +27,23 @@ municipios <- readxl::read_excel("municipios.xls", skip = 4) %>%
 #Inclusão Digital BRASIL----
 inclusao_digital <- df %>% 
   srvyr::as_survey(strata = stype) %>% 
-  srvyr::group_by(VI5002A, across(c(starts_with("S07002"), starts_with("S07004"), starts_with("S07004A"), S07006, S07007))) %>% 
+  srvyr::group_by(UF, VI5002A, across(c(starts_with("S07002"), starts_with("S07004"), starts_with("S07004A"), S07006, S07007))) %>% 
   srvyr::survey_tally() %>% 
   select(-n_se)
 
 inclusao_digital %>% 
-  pivot_longer(!c(n, VI5002A)) %>% 
+  left_join(municipios) %>% 
+  select(-UF, UF = nome) %>% 
+  filter(VI5002A != 9) %>% 
+  pivot_longer(!c(UF, n, VI5002A)) %>% 
   drop_na() %>% 
   mutate(sim = ifelse(value == 1, n, 0)) %>% 
-  group_by(VI5002A, name) %>% 
+  group_by(UF, VI5002A, name) %>% 
   summarize(prop = sum(sim)/sum(n)) %>% 
-  pivot_wider(id_cols = VI5002A, names_from = name, values_from = prop) %>% 
-  openxlsx::write.xlsx("tabelas/inclusao_digital_BF.xlsx")
+  pivot_wider(id_cols = c(UF, VI5002A), names_from = name, values_from = prop) %>% 
+  mutate(VI5002A = ifelse(VI5002A == 1, "Recebe", "Não Recebe")) %>% 
+  select(UF, "Bolsa Família" = VI5002A, everything()) %>% 
+  openxlsx::write.xlsx("tabelas/inclusao_digital_UF.xlsx")
 
 # Motivos para não ter internet ----
 freq_internet <- df %>% 
