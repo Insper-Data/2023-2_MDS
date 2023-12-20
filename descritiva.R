@@ -24,6 +24,37 @@ municipios <- readxl::read_excel("municipios.xls", skip = 4) %>%
   select(UF, nome = Nome_UF) %>% 
   distinct()
 
+
+#Força de trabalho
+
+forca_trabalho <- readxl::read_excel("tabelas/forca_trabalho.xlsx", skip = 3)
+
+forca_trabalho %>% 
+  slice(1:47) %>% 
+  select(data = "...2",
+         populacao = "Pessoas de 14 anos ou mais de idade (Mil pessoas)",
+         ocupadas_formais = "Pessoas de 14 anos ou mais de idade ocupadas na semana de referência (Mil pessoas)",
+         ocupadas_informais = "Pessoas de 14 anos ou mais de idade ocupadas, em situação de informalidade, na semana de referência (Mil pessoas)",
+         desocupadas = "Pessoas de 14 anos ou mais de idade, desocupadas na semana de referência (Mil pessoas)",
+         fora_forca = "Pessoas de 14 anos ou mais de idade, fora da força de trabalho, na semana de referência (Mil pessoas)") %>% 
+  mutate(across(c(populacao:fora_forca), ~ na_if(., "...")),
+         across(c(populacao:fora_forca), as.numeric),
+         ocupadas_formais = ifelse(is.na(ocupadas_informais), ocupadas_formais, ocupadas_formais - ocupadas_informais)) %>% 
+  pivot_longer(ocupadas_formais:fora_forca) %>% 
+  mutate(ano = str_sub(data, 14, 19) %>% as.numeric(),
+         trimestre = str_sub(data, 1, 1) %>% as.numeric(),
+         data = clock::year_quarter_day(ano, trimestre, 1) %>% as.Date()) %>% 
+  ggplot(aes(x = data)) +
+  geom_col(aes(y = value, fill = factor(name, labels = c("Desocupadas",
+                                                         "Fora da força de trabalho",
+                                                         "Ocupadas",
+                                                         "Ocupadas, em empregos informais")))) +
+  geom_line(aes(y = populacao)) +
+  scale_fill_viridis_d() +
+  labs(x = "Data", y = "Número de pessoas (milhares)", fill = "", title = "Força de trabalho no Brasil")
+
+ggsave("imagens/forca_trabalho.png", width = 12, height = 7, dpi = 600)
+
 #Inclusão Digital BRASIL----
 inclusao_digital <- df %>% 
   srvyr::as_survey(strata = stype) %>% 
