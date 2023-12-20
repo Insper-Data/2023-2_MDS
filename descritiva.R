@@ -8,7 +8,7 @@ library(stringi)
 library(openxlsx)
 
 
-df <- PNADcIBGE::get_pnadc(2022, topic = 4, labels = FALSE, design = TRUE)
+df <- PNADcIBGE::get_pnadc(2023, 3, labels = FALSE, design = TRUE)
 
 #PNAD CONTINUA
 df <- PNADcIBGE::read_pnadc(microdata = "dados_pnad/PNADC_032023.txt", 
@@ -233,3 +233,122 @@ carteira_assinada %>%
   select(-geometry) %>% 
   pivot_wider(names_from = VI5002A, values_from = tx_carteira_assinada, id_cols = UF) %>% 
   openxlsx::write.xlsx("tabelas/carteira_assinada.xlsx")
+
+
+## motivos do desalento
+motivos_desalentados <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1) %>% 
+  srvyr::group_by(V4074A) %>% 
+  srvyr::survey_tally()
+
+motivos_desalentados %>% 
+  select(-n_se) %>% 
+  slice(3:6) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = factor(V4074A, labels = c("Não conseguia trabalho adequado", "Não tinha experiência profissional ou qualificação", "Não conseguia trabalho por ser considerado muito jovem ou muito idoso", "Não havia trabalho na localidade")), y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "motivo", title = "Motivos declarados para o desalento", y = "percentual") + 
+  coord_flip()
+ggsave("imagens/motivos_declarados.png", height = 6, width = 10, dpi = 600)
+
+## perfil dos desalentados
+desalentados_uf <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1, V4074A %in% c("03", "04", "05", "06")) %>% 
+  srvyr::group_by(UF) %>% 
+  srvyr::survey_tally() %>% 
+  select(-n_se)
+
+desalentados_uf %>% left_join(municipios) %>% 
+  select(-UF, UF = nome) %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = reorder(UF, prop), y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "estado", title = " Distribuição estadual do desalento no 3º trimestre de 2023", y = "percentual") +
+  coord_flip()
+
+ggsave("imagens/desalentados_uf.png", height = 8, width = 12, dpi = 600)
+
+desalentados_genero <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1, V4074A %in% c("03", "04", "05", "06")) %>% 
+  srvyr::group_by(V2007) %>% 
+  srvyr::survey_tally() %>% 
+  select(-n_se)
+
+desalentados_genero %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = factor(V2007, labels = c("Homem", "Mulher")), y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "gênero", title = "Distribuição por gênero do desalento", y = "percentual")
+
+ggsave("imagens/desalentados_genero.png", height = 6, width = 10, dpi = 600)
+
+desalentados_raca <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1, V4074A %in% c("03", "04", "05", "06")) %>% 
+  srvyr::group_by(V2010) %>% 
+  srvyr::survey_tally() %>% 
+  select(-n_se)
+
+desalentados_raca %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = factor(V2010, labels = c("Branca", "Preta", "Amarela", "Parda", "Indígena")), y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "raça", title = " Distribuição por cor/raça do desalento", y = "percentual")
+
+ggsave("imagens/desalentados_raca.png", height = 6, width = 10, dpi = 600)
+
+
+desalentados_educacao <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1, V4074A %in% c("03", "04", "05", "06")) %>% 
+  srvyr::group_by(V3009A) %>% 
+  srvyr::survey_tally() %>% 
+  select(-n_se) %>% 
+  drop_na()
+
+desalentados_educacao %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = factor(V3009A, labels = c("Pré-escola", "Classe de alfabetização - CA", "Alfabetização de jovens e adultos",
+                                           "Antigo primário (elementar)", "Antigo ginásio (médio 1º ciclo)", "Regular do ensino fundamental ou do 1º grau",
+                                           "Educação de jovens e adultos (EJA) ou supletivo do 1º grau",
+                                           "Antigo científico, clássico, etc. (médio 2º ciclo)", 
+                                           "Regular do ensino médio ou do 2º grau", 
+                                           "Educação de jovens e adultos (EJA) ou supletivo do 2º grau",
+                                           "Superior - graduação", "Especialização de nível superior",
+                                           "Mestrado", "Doutorado"))
+             , y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "nível educacional", title = "Distribuição por Escolaridade do desalento", y = "percentual") +
+  coord_flip()
+
+ggsave("imagens/desalentados_educacao.png", height = 8, width = 10, dpi = 600)
+
+desalentados_idade <- df %>% 
+  srvyr::as_survey(strata = stype) %>% 
+  srvyr::filter(V4071 == 2, V4073 == 1, V4077 == 1, V4074A %in% c("03", "04", "05", "06")) %>% 
+  srvyr::mutate(faixa_etaria = cut(V2009, breaks = c(14, 23, 33, 43, 53, 63, Inf))) %>% 
+  srvyr::group_by(faixa_etaria) %>% 
+  srvyr::survey_tally() %>% 
+  drop_na() %>% 
+  select(-n_se)
+
+desalentados_idade %>% 
+  mutate(prop = n/sum(n)) %>% 
+  ggplot(aes(x = faixa_etaria, y = prop)) + 
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) + 
+  labs(x = "faixa etária", title = "Distribuição etária do desalento", y = "percentual") 
+
+ggsave("imagens/desalentados_idade.png", height = 6, width = 10, dpi = 600)
+
+
+
+
